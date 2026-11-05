@@ -7,7 +7,7 @@ import { findShow, statsFor, upcomingShows, venueTotals } from "./shows.ts";
 import { sellOnTheDoor, SaleError } from "./sales.ts";
 import { createDiscountCode, DiscountError } from "./discounts.ts";
 import { AuthError, ForbiddenError, clearedCookie, currentStaff, sessionCookie, signIn, signOut } from "./auth.ts";
-import { answerInText } from "./ask/answer.ts";
+import { generateAnswer } from "./ask/generate.ts";
 
 type Next = (err?: unknown) => void;
 
@@ -70,9 +70,9 @@ export async function api(req: IncomingMessage, res: ServerResponse, next: Next)
     }
     if (req.method === "POST" && url.pathname === "/api/ask") {
       const { question } = JSON.parse(await readBody(req));
-      res.setHeader("content-type", "text/plain; charset=utf-8");
-      for await (const text of answerInText(String(question))) res.write(text);
-      return res.end();
+      const spec = await generateAnswer(String(question));
+      if (!spec) return json(res, 200, { spec: null, message: "Sorry, I can't answer that one." });
+      return json(res, 200, { spec });
     }
     return json(res, 404, { error: "Not found" });
   } catch (err) {

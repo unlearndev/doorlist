@@ -14,7 +14,7 @@ h2 { font-size: 20px; }
 .venue { color: #c9c2d6; font-size: 13px; }
 .nav a { display: block; padding: 6px 0; text-decoration: none; color: #e9e4f2; }
 .main { padding: calc(var(--space) * 4); max-width: 1100px; }
-.app.with-drawer .main { margin-right: 520px; }
+.app.with-drawer .main { margin-right: 560px; }
 .who { margin-top: 32px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.15); font-size: 14px; }
 .link { font: inherit; font-size: 13px; background: none; border: 0; padding: 0; margin-top: 6px; color: #e9e4f2; text-decoration: underline; cursor: pointer; }
 .muted { color: var(--muted); }
@@ -59,7 +59,7 @@ tr.clickable:hover td { background: var(--paper); }
 .chart-wrap { margin: 0; }
 .chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 4px; }
 
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; background: var(--paper); border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgba(30, 27, 46, 0.08); display: flex; flex-direction: column; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 560px; background: var(--paper); border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgba(30, 27, 46, 0.08); display: flex; flex-direction: column; }
 .drawer-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .drawer-body { flex: 1; overflow: auto; padding: 20px; }
 .drawer-foot { padding: 16px 20px; border-top: 1px solid var(--line); display: flex; gap: 8px; }
@@ -86,3 +86,14 @@ tr.clickable:hover td { background: var(--paper); }
 .sign-in-card input { display: block; width: 100%; margin-top: 4px; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .sign-in-card .button { width: 100%; margin-top: 8px; }
 .brand.dark { margin-bottom: 4px; }
+
+.section { margin-bottom: 16px; }
+.section > h2 { margin-bottom: 12px; }
+.section-body { display: flex; flex-wrap: wrap; gap: 12px; }
+.section-body > .stat { flex: 1 1 140px; }
+.section-body > .card, .section-body > .callout, .section-body > .section { flex: 1 1 100%; margin-bottom: 0; }
+.badge, td:first-child { white-space: nowrap; }
+.drawer .card { overflow-x: auto; }
+.drawer table { font-size: 14px; }
+.drawer th, .drawer td { padding: 7px 6px; }
+.drawer .bar { min-width: 48px; }

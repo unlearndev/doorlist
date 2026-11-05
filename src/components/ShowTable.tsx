@@ -1,8 +1,20 @@
-import type { ShowStats } from "../types";
 import { PaceBadge } from "./PaceBadge";
 import { showDate, pounds } from "../format";
+import type { Pace } from "../types";
 
-export function ShowTable({ rows, onOpen }: { rows: ShowStats[]; onOpen?: (id: string) => void }) {
+export type ShowRow = {
+  id: string;
+  title: string;
+  date: string;
+  sold: number;
+  capacity: number;
+  sellThrough: number;
+  lastSevenDays: number;
+  revenuePence: number;
+  pace: Pace;
+};
+
+export function ShowTable({ rows, onOpen }: { rows: ShowRow[]; onOpen?: (id: string) => void }) {
   return (
     <table>
       <thead>
@@ -22,7 +34,7 @@ export function ShowTable({ rows, onOpen }: { rows: ShowStats[]; onOpen?: (id: s
             <td>{row.title}</td>
             <td>
               <div className="sold-cell">
-                <div className="bar"><span style={{ width: `${row.sellThrough * 100}%` }} /></div>
+                <div className="bar"><span style={{ width: `${Math.min(1, row.sellThrough) * 100}%` }} /></div>
                 {row.sold}/{row.capacity}
               </div>
             </td>

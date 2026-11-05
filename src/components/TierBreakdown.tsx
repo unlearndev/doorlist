@@ -1,7 +1,8 @@
-import type { Tier } from "../types";
 import { pounds } from "../format";
 
-export function TierBreakdown({ tiers }: { tiers: Tier[] }) {
+type TierRow = { id: string; name: string; pricePence: number; capacity: number; sold: number };
+
+export function TierBreakdown({ tiers }: { tiers: TierRow[] }) {
   return (
     <table>
       <thead>

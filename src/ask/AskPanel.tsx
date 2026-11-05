@@ -1,27 +1,32 @@
-// The Ask panel: staff type a question about their shows and Claude answers.
-// This first version shows the answer as plain text.
+// The Ask panel: staff type a question about their shows, and Claude answers
+// with Doorlist's own components, drawn by json-render from the spec it sends.
 import { useState } from "react";
+import { JSONUIProvider, Renderer, type Spec } from "@json-render/react";
+import { registry } from "./registry";
 
 export function AskPanel({ onClose }: { onClose: () => void }) {
   const [question, setQuestion] = useState("");
   const [asked, setAsked] = useState<string | null>(null);
-  const [answer, setAnswer] = useState("");
+  const [spec, setSpec] = useState<Spec | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function ask() {
     if (!question.trim()) return;
     setAsked(question);
-    setAnswer("");
+    setSpec(null);
+    setMessage(null);
     setBusy(true);
-    const res = await fetch("/api/ask", { method: "POST", body: JSON.stringify({ question }) });
-    const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      setAnswer((a) => a + value);
+    try {
+      const res = await fetch("/api/ask", { method: "POST", body: JSON.stringify({ question }) });
+      const body = await res.json();
+      if (!res.ok) setMessage(body.error ?? "Something went wrong.");
+      else if (body.spec) setSpec(body.spec);
+      else setMessage(body.message);
+    } finally {
+      setBusy(false);
+      setQuestion("");
     }
-    setBusy(false);
-    setQuestion("");
   }
 
   return (
@@ -32,8 +37,13 @@ export function AskPanel({ onClose }: { onClose: () => void }) {
       </div>
       <div className="drawer-body">
         {asked && <div className="question">{asked}</div>}
-        {busy && !answer && <div className="thinking">Working it out…</div>}
-        <div className="answer-text">{answer}</div>
+        {busy && <div className="thinking">Working it out…</div>}
+        {message && <div className="answer-text">{message}</div>}
+        {spec && (
+          <JSONUIProvider registry={registry} initialState={spec.state ?? {}}>
+            <Renderer spec={spec} registry={registry} />
+          </JSONUIProvider>
+        )}
       </div>
       <form className="drawer-foot" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
         <input aria-label="Question" placeholder="Ask about your shows…" value={question} onChange={(e) => setQuestion(e.target.value)} />
