@@ -30,7 +30,9 @@ The app runs on a fixed date, 2 November 2026, so the figures always read the sa
   - `shows.ts`: every figure the app shows, worked out from the tiers
   - `sales.ts`, `discounts.ts`: selling on the door, and discount codes
   - `auth.ts`: staff sign-in and roles
-  - `ask/`: the Ask panel's server side
+  - `ask/`: the Ask panel's server side (`generate.ts` asks Claude and checks every line of its answer)
   - `data/seed.ts`: the venue and its shows, generated the same way every time
 - `src/`: the React app, its components (`src/components/`) and design tokens (`src/styles/tokens.css`)
+  - `ask/`: the Ask panel, its catalog of components, how each one is drawn, and its actions
 - `tests/`: Vitest tests
+  - `fixtures/`: hand-written answers that Claude doesn't usually give, but could. While developing, ask `replay <name>` in the Ask panel to play one through the same checks as a real answer.
