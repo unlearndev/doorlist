@@ -3,7 +3,7 @@
 // signed-in member of staff.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { db } from "./db.ts";
-import { findShow, statsFor, upcomingShows, venueTotals } from "./shows.ts";
+import { METRICS, figure, findShow, queryShows, statsFor, venueTotals, type Metric, type ShowQuery } from "./shows.ts";
 import { sellOnTheDoor, SaleError } from "./sales.ts";
 import { createDiscountCode, DiscountError } from "./discounts.ts";
 import { AuthError, ForbiddenError, clearedCookie, currentStaff, sessionCookie, signIn, signOut } from "./auth.ts";
@@ -53,7 +53,21 @@ export async function api(req: IncomingMessage, res: ServerResponse, next: Next)
       return json(res, 200, { venue: db.venue, totals: venueTotals() });
     }
     if (req.method === "GET" && url.pathname === "/api/shows") {
-      return json(res, 200, upcomingShows().map(statsFor));
+      const q = url.searchParams;
+      const query: ShowQuery = {
+        month: q.get("month"),
+        pace: q.get("pace") as ShowQuery["pace"],
+        layout: q.get("layout") as ShowQuery["layout"],
+        ids: q.get("ids")?.split(",").filter(Boolean),
+        sort: q.get("sort") as ShowQuery["sort"],
+        limit: q.get("limit") ? Number(q.get("limit")) : null,
+      };
+      return json(res, 200, queryShows(query));
+    }
+    if (req.method === "GET" && url.pathname === "/api/figures") {
+      const metric = url.searchParams.get("metric") as Metric;
+      if (!METRICS.includes(metric)) return json(res, 400, { error: "Unknown metric." });
+      return json(res, 200, figure(metric, { month: url.searchParams.get("month"), showId: url.searchParams.get("showId") }));
     }
     if (req.method === "GET" && parts[1] === "shows" && parts.length === 3) {
       const show = findShow(parts[2]);

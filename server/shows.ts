@@ -96,3 +96,45 @@ export function venueTotals() {
     showsBehind: upcoming.filter((r) => r.pace === "behind").length,
   };
 }
+
+// The shows an answer asks for, filtered and sorted by Doorlist.
+export type ShowQuery = {
+  month?: string | null; // YYYY-MM
+  pace?: Pace | null;
+  layout?: "standing" | "seated" | null;
+  ids?: string[] | null;
+  sort?: "date" | "sellThrough" | "lastSevenDays" | null;
+  limit?: number | null;
+};
+
+export function queryShows(query: ShowQuery): ShowStats[] {
+  let rows = upcomingShows()
+    .filter((s) => !query.month || s.date.startsWith(query.month))
+    .filter((s) => !query.layout || s.layout === query.layout)
+    .filter((s) => !query.ids?.length || query.ids.includes(s.id))
+    .map(statsFor)
+    .filter((r) => !query.pace || r.pace === query.pace);
+  if (query.sort === "sellThrough") rows = rows.sort((a, b) => a.sellThrough - b.sellThrough);
+  if (query.sort === "lastSevenDays") rows = rows.sort((a, b) => a.lastSevenDays - b.lastSevenDays);
+  if (query.limit) rows = rows.slice(0, query.limit);
+  return rows;
+}
+
+// One headline figure, worked out by Doorlist, for a month or a show.
+export const METRICS = ["ticketsSold", "capacity", "sellThrough", "revenue", "lastSevenDays", "showsBehind", "shows"] as const;
+export type Metric = (typeof METRICS)[number];
+export type Figure = { value: number; format: "number" | "pounds" | "percent" };
+
+export function figure(metric: Metric, scope: { month?: string | null; showId?: string | null }): Figure {
+  const rows = queryShows({ month: scope.month, ids: scope.showId ? [scope.showId] : null });
+  const sum = (key: "sold" | "capacity" | "revenuePence" | "lastSevenDays") => rows.reduce((n, r) => n + r[key], 0);
+  switch (metric) {
+    case "ticketsSold": return { value: sum("sold"), format: "number" };
+    case "capacity": return { value: sum("capacity"), format: "number" };
+    case "sellThrough": return { value: sum("capacity") ? sum("sold") / sum("capacity") : 0, format: "percent" };
+    case "revenue": return { value: sum("revenuePence"), format: "pounds" };
+    case "lastSevenDays": return { value: sum("lastSevenDays"), format: "number" };
+    case "showsBehind": return { value: rows.filter((r) => r.pace === "behind").length, format: "number" };
+    case "shows": return { value: rows.length, format: "number" };
+  }
+}
