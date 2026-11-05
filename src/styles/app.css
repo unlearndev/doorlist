@@ -97,3 +97,8 @@ tr.clickable:hover td { background: var(--paper); }
 .drawer table { font-size: 14px; }
 .drawer th, .drawer td { padding: 7px 6px; }
 .drawer .bar { min-width: 48px; }
+
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); flex: 1 1 200px; }
+.field select, .field input { font: inherit; font-size: 15px; color: var(--ink); padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.number-field { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.number-field input { width: 96px; }
