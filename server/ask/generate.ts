@@ -7,10 +7,14 @@
 // A follow-up question sends the answer that's on screen, and Claude
 // replies with patches that change it, rather than a whole new answer.
 //
+// While developing, "replay <name>" plays a hand-written answer from
+// tests/fixtures through the same checks, instead of asking Claude.
+//
 // Claude only sees the list of shows, never a figure. Every patch is
 // applied to a copy of the answer so far and kept only if what it touched
 // still fits the catalog, so every number on screen comes from Doorlist's
 // API, and every button runs one of Doorlist's own actions.
+import { readFileSync } from "node:fs";
 import Anthropic from "@anthropic-ai/sdk";
 import { applySpecPatch, buildUserPrompt, type Spec } from "@json-render/core";
 import { catalog, layout, pace } from "../../src/ask/catalog.ts";
@@ -98,8 +102,8 @@ export function checkSpec(spec: Spec | null | undefined): Spec {
   return { root: spec?.root ?? "", elements, state: spec?.state };
 }
 
-export async function* answerStream(question: string, onScreen?: Spec | null): AsyncGenerator<string> {
-  const current = onScreen?.root ? checkSpec(onScreen) : null;
+// Where an answer comes from: Claude, writing it now.
+async function* fromClaude(question: string, current: Spec | null): AsyncGenerator<string> {
   const stream = client.beta.messages.stream({
     model: MODEL,
     max_tokens: 16000,
@@ -118,7 +122,25 @@ export async function* answerStream(question: string, onScreen?: Spec | null): A
       },
     ],
   });
+  for await (const event of stream) {
+    if (event.type === "content_block_delta" && event.delta.type === "text_delta") yield event.delta.text;
+  }
+  const { usage } = await stream.finalMessage();
+  const promptTokens = usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+  console.log(`Ask: "${question}" (${promptTokens} tokens in, ${usage.output_tokens} out)`);
+}
 
+// Or, while developing, a hand-written answer from tests/fixtures, played
+// through exactly the same checks: ask "replay <name>" in the Ask panel.
+async function* fromFixture(name: string): AsyncGenerator<string> {
+  yield readFileSync(new URL(`../../tests/fixtures/${name}.jsonl`, import.meta.url), "utf8");
+}
+
+const REPLAY = /^replay ([a-z-]+)$/;
+
+// Checks each line of an answer as it arrives, and passes on the ones that
+// are allowed, so the panel can draw the answer while it's still coming in.
+export async function* checkedLines(text: AsyncIterable<string>, current: Spec | null): AsyncGenerator<string> {
   let spec: Spec = current ?? { root: "", elements: {} };
   let buffer = "";
   const check = (line: string) => {
@@ -136,9 +158,8 @@ export async function* answerStream(question: string, onScreen?: Spec | null): A
     return null;
   };
 
-  for await (const event of stream) {
-    if (event.type !== "content_block_delta" || event.delta.type !== "text_delta") continue;
-    buffer += event.delta.text;
+  for await (const chunk of text) {
+    buffer += chunk;
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
     for (const line of lines) {
@@ -148,9 +169,11 @@ export async function* answerStream(question: string, onScreen?: Spec | null): A
   }
   const last = check(buffer);
   if (last) yield last;
+}
 
-  const { usage } = await stream.finalMessage();
-  const promptTokens = usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
-  console.log(`Ask: "${question}" (${promptTokens} tokens in, ${usage.output_tokens} out)`);
-  yield `${JSON.stringify({ __meta: "usage", promptTokens, completionTokens: usage.output_tokens, totalTokens: promptTokens + usage.output_tokens })}\n`;
+export async function* answerStream(question: string, onScreen?: Spec | null): AsyncGenerator<string> {
+  const current = onScreen?.root ? checkSpec(onScreen) : null;
+  const replay = REPLAY.exec(question.trim());
+  const text = replay && process.env.NODE_ENV !== "production" ? fromFixture(replay[1]) : fromClaude(question, current);
+  yield* checkedLines(text, current);
 }

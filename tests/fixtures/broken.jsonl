@@ -1,0 +1,7 @@
+{"op":"add","path":"/root","value":"answer"}
+{"op":"add","path":"/elements/answer","value":{"type":"Section","props":{"title":"December so far"},"children":["sold","profit","split","table","note"]}}
+{"op":"add","path":"/elements/sold","value":{"type":"StatCard","props":{"label":"Tickets sold","metric":"ticketsSold","month":"2026-12"}}}
+{"op":"add","path":"/elements/profit","value":{"type":"StatCard","props":{"label":"Profit","metric":"profit","month":"2026-12"}}}
+{"op":"add","path":"/elements/split","value":{"type":"PieChart","props":{"title":"Standing and seated","month":"2026-12"}}}
+{"op":"add","path":"/elements/table","value":{"type":"ShowTable","props":{"month":"2026-12","pace":"behind"}}}
+{"op":"add","path":"/elements/note","value":{"type":"Callout","props":{"tone":"warning","title":"These two need a pu

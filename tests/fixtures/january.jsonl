@@ -1,0 +1,4 @@
+{"op":"add","path":"/root","value":"answer"}
+{"op":"add","path":"/elements/answer","value":{"type":"Section","props":{"title":"January"},"children":["sold","table"]}}
+{"op":"add","path":"/elements/sold","value":{"type":"StatCard","props":{"label":"Tickets sold","metric":"ticketsSold","month":"2027-01"}}}
+{"op":"add","path":"/elements/table","value":{"type":"ShowTable","props":{"month":"2027-01"}}}

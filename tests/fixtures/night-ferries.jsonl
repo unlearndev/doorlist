@@ -1,0 +1,6 @@
+{"op":"add","path":"/root","value":"answer"}
+{"op":"add","path":"/elements/answer","value":{"type":"Section","props":{"title":"The Night Ferries"},"children":["sold","tiers","refund","discount"]}}
+{"op":"add","path":"/elements/sold","value":{"type":"StatCard","props":{"label":"Tickets sold","metric":"ticketsSold","showId":"kr-1107"}}}
+{"op":"add","path":"/elements/tiers","value":{"type":"TierBreakdown","props":{"showId":"kr-1107"}}}
+{"op":"add","path":"/elements/refund","value":{"type":"Button","props":{"label":"Refund everyone","variant":"secondary"},"on":{"press":{"action":"refund_all_orders","params":{"showId":"kr-1107"}}}}}
+{"op":"add","path":"/elements/discount","value":{"type":"Button","props":{"label":"Create a discount code"},"on":{"press":{"action":"create_discount","params":{"showId":"kr-1107","percent":20}}}}}
