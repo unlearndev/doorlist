@@ -104,3 +104,6 @@ tr.clickable:hover td { background: var(--paper); }
 .number-field input { width: 96px; }
 .answer-button { flex: 1 1 100%; }
 .dialog-backdrop { z-index: 10; }
+.placeholder { display: block; background: var(--paper-2); border-radius: 6px; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.5; } }
+.drawer-head .row { display: flex; gap: 8px; }

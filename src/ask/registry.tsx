@@ -10,6 +10,7 @@ import { ShowTable, type ShowRow } from "../components/ShowTable";
 import { SalesChart } from "../components/SalesChart";
 import { TierBreakdown } from "../components/TierBreakdown";
 import { Callout } from "../components/Callout";
+import { Placeholder } from "../components/Placeholder";
 import { Field, Select } from "../components/Fields";
 import type { Show, ShowStats } from "../types";
 import { percent, pounds } from "../format";
@@ -45,7 +46,7 @@ export const { registry, handlers } = defineRegistry(catalog, {
     Section: ({ props, children }) => <Section title={props.title}>{children}</Section>,
     StatCard: ({ props }) => {
       const figure = useLive<Figure>(`/api/figures?${query({ metric: props.metric, month: props.month, showId: props.showId })}`);
-      return <StatCard label={props.label} value={figure ? formatFigure(figure) : "…"} hint={props.hint} />;
+      return <StatCard label={props.label} value={figure ? formatFigure(figure) : <Placeholder width={72} />} hint={props.hint} />;
     },
     ShowTable: ({ props }) => {
       // pace and layout arrive already resolved when they follow a filter.
@@ -54,7 +55,7 @@ export const { registry, handlers } = defineRegistry(catalog, {
       const rows = useLive<ShowRow[]>(`/api/shows?${query({ month: props.month, pace, layout, ids: props.showIds, sort: props.sort, limit: props.limit })}`);
       return (
         <div className="card">
-          <ShowTable rows={rows ?? []} onOpen={(id) => (location.hash = `/shows/${id}`)} />
+          {rows ? <ShowTable rows={rows} onOpen={(id) => (location.hash = `/shows/${id}`)} /> : <Placeholder height={120} />}
         </div>
       );
     },
@@ -63,7 +64,7 @@ export const { registry, handlers } = defineRegistry(catalog, {
       return (
         <div className="card">
           <h2>{show ? `${show.title}: tickets sold per day` : "Tickets sold per day"}</h2>
-          <SalesChart days={show?.dailySales ?? []} />
+          {show ? <SalesChart days={show.dailySales} /> : <Placeholder height={140} />}
         </div>
       );
     },
@@ -72,7 +73,7 @@ export const { registry, handlers } = defineRegistry(catalog, {
       return (
         <div className="card">
           {show && <h2>{show.title}: tickets</h2>}
-          <TierBreakdown tiers={show?.tiers ?? []} />
+          {show ? <TierBreakdown tiers={show.tiers} /> : <Placeholder height={100} />}
         </div>
       );
     },

@@ -1,13 +1,18 @@
 // Ask, answering with Doorlist's own components. Claude gets the catalog as
 // its instructions (catalog.prompt()) and writes back a spec: which
 // components to show, in what order, and what each one should fetch. It
-// arrives as JSON patches, one per line, which we put together here.
+// streams as JSON patches, one per line, and each line goes on to the panel
+// as soon as it's checked, so the answer builds up while Claude writes it.
 //
-// Claude only sees the list of shows, never a figure. Anything it writes to
-// /state is dropped, and so is any element that doesn't fit its catalog
-// entry, so every number on screen comes from Doorlist's API.
+// A follow-up question sends the answer that's on screen, and Claude
+// replies with patches that change it, rather than a whole new answer.
+//
+// Claude only sees the list of shows, never a figure. Every patch is
+// applied to a copy of the answer so far and kept only if what it touched
+// still fits the catalog, so every number on screen comes from Doorlist's
+// API, and every button runs one of Doorlist's own actions.
 import Anthropic from "@anthropic-ai/sdk";
-import { buildUserPrompt, compileSpecStream, type Spec } from "@json-render/core";
+import { applySpecPatch, buildUserPrompt, type Spec } from "@json-render/core";
 import { catalog, layout, pace } from "../../src/ask/catalog.ts";
 import { askContext } from "./context.ts";
 
@@ -22,15 +27,8 @@ export const SYSTEM = catalog.prompt({
   ],
 });
 
-// Claude may set the root, add elements, and give filters and form fields
-// their starting values. Nothing else, so no figures in /state.
-export function keepLine(patch: { op?: string; path?: string; value?: unknown }) {
-  const path = patch.path ?? "";
-  if (path === "/root" || /^\/elements\/[^/]+$/.test(path)) return true;
-  if (/^\/state\/filters(\/[a-zA-Z]+)?$/.test(path)) return filterValues(patch.value);
-  if (/^\/state\/form(\/[a-zA-Z]+)?$/.test(path)) return startingValues(patch.value);
-  return false;
-}
+type Patch = { op?: string; path?: string; value?: unknown };
+type Element = Spec["elements"][string] & { watch?: unknown };
 
 // A filter starts on one of Doorlist's own options, or "" for All.
 const FILTER_VALUES: unknown[] = ["", ...pace.options, ...layout.options];
@@ -53,9 +51,9 @@ function startingValues(value: unknown): boolean {
 // navigate on success) means the element is left out.
 const ACTIONS = Object.keys(catalog.data.actions);
 
-function onlyOurActions(element: { on?: Record<string, unknown>; watch?: unknown }): boolean {
+function onlyOurActions(element: Element): boolean {
   if (element.watch) return false;
-  const bindings = Object.values(element.on ?? {}).flat() as Record<string, unknown>[];
+  const bindings = Object.values(element.on ?? {}).flat() as unknown as Record<string, unknown>[];
   return bindings.every((binding) => {
     if (!binding || typeof binding !== "object") return false;
     if (Object.keys(binding).some((key) => key !== "action" && key !== "params")) return false;
@@ -67,22 +65,41 @@ function onlyOurActions(element: { on?: Record<string, unknown>; watch?: unknown
   });
 }
 
-// Each element must be a component from the catalog, with props that fit
-// its entry, and buttons that only run our actions. Anything else is left
-// out of the answer.
-export function checkSpec(spec: Spec): { spec: Spec; dropped: string[] } {
+// An element fits when it's a component from the catalog, its props fit
+// that component's entry, and its buttons only run our actions.
+export function elementFits(element: Element | undefined): boolean {
+  if (!element) return false;
   const components = catalog.data.components as Record<string, { props: { safeParse: (p: unknown) => { success: boolean } } }>;
-  const elements: Spec["elements"] = {};
-  const dropped: string[] = [];
-  for (const [key, element] of Object.entries(spec.elements ?? {})) {
-    const entry = components[element.type];
-    if (entry && entry.props.safeParse(element.props ?? {}).success && onlyOurActions(element)) elements[key] = element;
-    else dropped.push(`${key} (${element.type})`);
-  }
-  return { spec: { root: spec.root, elements, state: spec.state }, dropped };
+  const entry = components[element.type];
+  return Boolean(entry && entry.props.safeParse(element.props ?? {}).success && onlyOurActions(element));
 }
 
-export async function generateAnswer(question: string): Promise<Spec | null> {
+// Applies one patch to a copy of the answer, and returns the new answer, or
+// null if the patch isn't allowed or leaves an element that doesn't fit.
+export function applyChecked(spec: Spec, patch: Patch): Spec | null {
+  const path = patch.path ?? "";
+  if (!["add", "replace", "remove"].includes(patch.op ?? "")) return null;
+  const apply = () => applySpecPatch(structuredClone(spec), patch as Parameters<typeof applySpecPatch>[1]);
+  if (path === "/root") return patch.op !== "remove" && typeof patch.value === "string" ? apply() : null;
+  if (/^\/state\/filters(\/[a-zA-Z]+)?$/.test(path)) return patch.op === "remove" || filterValues(patch.value) ? apply() : null;
+  if (/^\/state\/form(\/[a-zA-Z]+)?$/.test(path)) return patch.op === "remove" || startingValues(patch.value) ? apply() : null;
+  const key = /^\/elements\/([^/]+)/.exec(path)?.[1];
+  if (!key) return null;
+  const next = apply();
+  if (patch.op === "remove" && path === `/elements/${key}`) return next;
+  return elementFits(next.elements[key] as Element) ? next : null;
+}
+
+// Keeps only the elements that fit, for an answer the panel sends back
+// with a follow-up question.
+export function checkSpec(spec: Spec | null | undefined): Spec {
+  const elements: Spec["elements"] = {};
+  for (const [key, element] of Object.entries(spec?.elements ?? {})) if (elementFits(element as Element)) elements[key] = element;
+  return { root: spec?.root ?? "", elements, state: spec?.state };
+}
+
+export async function* answerStream(question: string, onScreen?: Spec | null): AsyncGenerator<string> {
+  const current = onScreen?.root ? checkSpec(onScreen) : null;
   const stream = client.beta.messages.stream({
     model: MODEL,
     max_tokens: 16000,
@@ -93,21 +110,47 @@ export async function generateAnswer(question: string): Promise<Spec | null> {
     messages: [
       {
         role: "user",
-        content: buildUserPrompt({ prompt: `Venue and shows:\n${JSON.stringify(askContext())}\n\nQuestion: ${question}` }),
+        content: buildUserPrompt({
+          prompt: `Venue and shows:\n${JSON.stringify(askContext())}\n\nQuestion: ${question}`,
+          currentSpec: current,
+          editModes: ["patch"],
+        }),
       },
     ],
   });
-  const message = await stream.finalMessage();
-  if (message.stop_reason === "refusal") return null;
-  const text = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
-  const lines = text.split("\n").filter((line) => {
+
+  let spec: Spec = current ?? { root: "", elements: {} };
+  let buffer = "";
+  const check = (line: string) => {
+    if (!line.trim()) return null;
     try {
-      return keepLine(JSON.parse(line));
+      const next = applyChecked(spec, JSON.parse(line));
+      if (next) {
+        spec = next;
+        return `${line.trim()}\n`;
+      }
     } catch {
-      return false;
+      // Not a whole JSON line, so there's nothing to keep.
     }
-  });
-  const { spec, dropped } = checkSpec(compileSpecStream(lines.join("\n")) as unknown as Spec);
-  if (dropped.length) console.warn("Ask left out:", dropped.join(", "));
-  return spec;
+    console.warn("Ask left out:", line.slice(0, 160));
+    return null;
+  };
+
+  for await (const event of stream) {
+    if (event.type !== "content_block_delta" || event.delta.type !== "text_delta") continue;
+    buffer += event.delta.text;
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const kept = check(line);
+      if (kept) yield kept;
+    }
+  }
+  const last = check(buffer);
+  if (last) yield last;
+
+  const { usage } = await stream.finalMessage();
+  const promptTokens = usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+  console.log(`Ask: "${question}" (${promptTokens} tokens in, ${usage.output_tokens} out)`);
+  yield `${JSON.stringify({ __meta: "usage", promptTokens, completionTokens: usage.output_tokens, totalTokens: promptTokens + usage.output_tokens })}\n`;
 }

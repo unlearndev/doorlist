@@ -7,7 +7,7 @@ import { METRICS, figure, findShow, queryShows, statsFor, venueTotals, type Metr
 import { sellOnTheDoor, SaleError } from "./sales.ts";
 import { createDiscountCode, DiscountError } from "./discounts.ts";
 import { AuthError, ForbiddenError, clearedCookie, currentStaff, sessionCookie, signIn, signOut } from "./auth.ts";
-import { generateAnswer } from "./ask/generate.ts";
+import { answerStream } from "./ask/generate.ts";
 
 type Next = (err?: unknown) => void;
 
@@ -83,10 +83,12 @@ export async function api(req: IncomingMessage, res: ServerResponse, next: Next)
       return json(res, 201, createDiscountCode(staff, { showId: parts[2], percent: Number(percent) }));
     }
     if (req.method === "POST" && url.pathname === "/api/ask") {
-      const { question } = JSON.parse(await readBody(req));
-      const spec = await generateAnswer(String(question));
-      if (!spec) return json(res, 200, { spec: null, message: "Sorry, I can't answer that one." });
-      return json(res, 200, { spec });
+      // useUIStream sends the question as `prompt`, and the answer on screen
+      // as `currentSpec` when it's a follow-up.
+      const { prompt, currentSpec } = JSON.parse(await readBody(req));
+      res.setHeader("content-type", "text/plain; charset=utf-8");
+      for await (const line of answerStream(String(prompt), currentSpec)) res.write(line);
+      return res.end();
     }
     return json(res, 404, { error: "Not found" });
   } catch (err) {

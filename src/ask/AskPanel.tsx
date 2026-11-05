@@ -1,19 +1,40 @@
 // The Ask panel: staff type a question about their shows, and Claude answers
-// with Doorlist's own components, drawn by json-render from the spec it sends.
-import { useEffect, useState } from "react";
-import { JSONUIProvider, Renderer, type Spec } from "@json-render/react";
+// with Doorlist's own components, drawn by json-render as the answer streams
+// in. A follow-up question changes the answer on screen, and anything the
+// user has picked in it (a filter, a form field) stays as it was.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { JSONUIProvider, Renderer, createStateStore, useUIStream } from "@json-render/react";
 import { handlers, registry } from "./registry";
 import { whenDiscountRequested, type DiscountRequest } from "./actions";
 import { DiscountDialog } from "../components/DiscountDialog";
 
+// Copies the starting values Claude sets for filters and form fields into
+// the answer's state. A value is only copied when it's new or Claude has
+// changed it, so a follow-up never undoes what the user picked.
+function useStartingValues(state: Record<string, unknown> | undefined, store: ReturnType<typeof createStateStore>) {
+  const copied = useRef(new Map<string, string>());
+  useEffect(() => {
+    for (const [group, values] of Object.entries(state ?? {})) {
+      if (!values || typeof values !== "object") continue;
+      for (const [name, value] of Object.entries(values)) {
+        const path = `/${group}/${name}`;
+        if (copied.current.get(path) === JSON.stringify(value)) continue;
+        copied.current.set(path, JSON.stringify(value));
+        store.set(path, value);
+      }
+    }
+  }, [state, store]);
+  return () => copied.current.clear();
+}
+
 export function AskPanel({ onClose }: { onClose: () => void }) {
   const [question, setQuestion] = useState("");
-  const [asked, setAsked] = useState<string | null>(null);
-  const [spec, setSpec] = useState<Spec | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [asked, setAsked] = useState<string[]>([]);
   const [discount, setDiscount] = useState<(DiscountRequest & { title: string }) | null>(null);
   const [created, setCreated] = useState<string | null>(null);
+  const { spec, isStreaming, error, send, clear } = useUIStream({ api: "/api/ask" });
+  const store = useMemo(() => createStateStore({}), []);
+  const forgetStartingValues = useStartingValues(spec?.state, store);
 
   // A button in an answer can only open Doorlist's own discount dialog,
   // filled in. Staff check it there, and the server has the final say.
@@ -27,37 +48,39 @@ export function AskPanel({ onClose }: { onClose: () => void }) {
     });
   }, []);
 
-  async function ask() {
+  function ask() {
     if (!question.trim()) return;
-    setAsked(question);
-    setSpec(null);
-    setMessage(null);
-    setBusy(true);
-    try {
-      const res = await fetch("/api/ask", { method: "POST", body: JSON.stringify({ question }) });
-      const body = await res.json();
-      if (!res.ok) setMessage(body.error ?? "Something went wrong.");
-      else if (body.spec) setSpec(body.spec);
-      else setMessage(body.message);
-    } finally {
-      setBusy(false);
-      setQuestion("");
-    }
+    setAsked((a) => [...a, question]);
+    setCreated(null);
+    setQuestion("");
+    // With an answer on screen, the question is a follow-up that changes it.
+    void send(question, { previousSpec: spec?.root ? spec : undefined });
+  }
+
+  function startAgain() {
+    clear();
+    setAsked([]);
+    setCreated(null);
+    forgetStartingValues();
+    store.update({ "/filters": {}, "/form": {} });
   }
 
   return (
     <aside className="drawer" aria-label="Ask Doorlist">
       <div className="drawer-head">
         <h2>Ask Doorlist</h2>
-        <button className="button secondary" onClick={onClose}>Close</button>
+        <div className="row">
+          {asked.length > 0 && <button className="button secondary" onClick={startAgain} disabled={isStreaming}>Start again</button>}
+          <button className="button secondary" onClick={onClose}>Close</button>
+        </div>
       </div>
       <div className="drawer-body">
-        {asked && <div className="question">{asked}</div>}
-        {busy && <div className="thinking">Working it out…</div>}
-        {message && <div className="answer-text">{message}</div>}
-        {spec && (
-          <JSONUIProvider registry={registry} initialState={spec.state ?? {}} handlers={handlers(() => undefined, () => ({}))}>
-            <Renderer spec={spec} registry={registry} />
+        {asked.map((q, i) => <div key={i} className="question">{q}</div>)}
+        {isStreaming && !spec?.root && <div className="thinking">Working it out…</div>}
+        {error && <div className="answer-text">Something went wrong: {error.message}</div>}
+        {spec?.root && (
+          <JSONUIProvider registry={registry} store={store} handlers={handlers(() => undefined, () => ({}))}>
+            <Renderer spec={spec} registry={registry} loading={isStreaming} />
           </JSONUIProvider>
         )}
         {created && <p className="success">Created discount code {created}.</p>}
@@ -73,9 +96,9 @@ export function AskPanel({ onClose }: { onClose: () => void }) {
           }}
         />
       )}
-      <form className="drawer-foot" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
-        <input aria-label="Question" placeholder="Ask about your shows…" value={question} onChange={(e) => setQuestion(e.target.value)} />
-        <button className="button" disabled={busy}>Ask</button>
+      <form className="drawer-foot" onSubmit={(e) => { e.preventDefault(); ask(); }}>
+        <input aria-label="Question" placeholder={spec?.root ? "Ask a follow-up…" : "Ask about your shows…"} value={question} onChange={(e) => setQuestion(e.target.value)} />
+        <button className="button" disabled={isStreaming}>Ask</button>
       </form>
     </aside>
   );
