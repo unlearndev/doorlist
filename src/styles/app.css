@@ -102,3 +102,5 @@ tr.clickable:hover td { background: var(--paper); }
 .field select, .field input { font: inherit; font-size: 15px; color: var(--ink); padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: white; }
 .number-field { display: flex; align-items: center; gap: 8px; color: var(--ink); }
 .number-field input { width: 96px; }
+.answer-button { flex: 1 1 100%; }
+.dialog-backdrop { z-index: 10; }

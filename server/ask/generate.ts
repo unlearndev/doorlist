@@ -47,15 +47,36 @@ function startingValues(value: unknown): boolean {
   return false;
 }
 
+// A button may only run Doorlist's own actions, with params that are
+// values or point at a form field. Anything else a binding could carry
+// (json-render's built-in setState, a confirm message Claude wrote, a
+// navigate on success) means the element is left out.
+const ACTIONS = Object.keys(catalog.data.actions);
+
+function onlyOurActions(element: { on?: Record<string, unknown>; watch?: unknown }): boolean {
+  if (element.watch) return false;
+  const bindings = Object.values(element.on ?? {}).flat() as Record<string, unknown>[];
+  return bindings.every((binding) => {
+    if (!binding || typeof binding !== "object") return false;
+    if (Object.keys(binding).some((key) => key !== "action" && key !== "params")) return false;
+    if (!ACTIONS.includes(String(binding.action))) return false;
+    const params = (binding.params ?? {}) as Record<string, unknown>;
+    return Object.values(params).every(
+      (v) => typeof v === "string" || typeof v === "number" || (typeof v === "object" && v !== null && /^\/form\/[a-zA-Z]+$/.test(String((v as { $state?: unknown }).$state))),
+    );
+  });
+}
+
 // Each element must be a component from the catalog, with props that fit
-// its entry. Anything else is left out of the answer.
+// its entry, and buttons that only run our actions. Anything else is left
+// out of the answer.
 export function checkSpec(spec: Spec): { spec: Spec; dropped: string[] } {
   const components = catalog.data.components as Record<string, { props: { safeParse: (p: unknown) => { success: boolean } } }>;
   const elements: Spec["elements"] = {};
   const dropped: string[] = [];
   for (const [key, element] of Object.entries(spec.elements ?? {})) {
     const entry = components[element.type];
-    if (entry && entry.props.safeParse(element.props ?? {}).success) elements[key] = element;
+    if (entry && entry.props.safeParse(element.props ?? {}).success && onlyOurActions(element)) elements[key] = element;
     else dropped.push(`${key} (${element.type})`);
   }
   return { spec: { root: spec.root, elements, state: spec.state }, dropped };

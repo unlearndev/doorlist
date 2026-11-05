@@ -82,6 +82,24 @@ export const catalog = defineCatalog(schema, {
       props: z.object({ label: words, value: z.object({ $bindState: formPath }).strict(), suffix: words.nullish() }),
       description: "A form field for a whole number, such as a percentage. Bind value to a path under /form, and set a suggested starting value in /state/form.",
     },
+    Button: {
+      props: z.object({ label: words, variant: z.enum(["primary", "secondary"]).nullish() }),
+      description:
+        'A button that runs one of Doorlist\'s actions when pressed: set on.press to { "action": "<name>", "params": { ... } }. A param can come from a form field with { "$state": "/form/<field>" }.',
+    },
   },
-  actions: {},
+  // The only things a button in an answer can do. Each one is handled by
+  // Doorlist's own code (src/ask/actions.ts), which checks the params, and
+  // anything that changes data goes through Doorlist's API and its checks.
+  actions: {
+    open_show: {
+      params: z.object({ showId }),
+      description: "Open a show's page in Doorlist.",
+    },
+    create_discount: {
+      params: z.object({ showId, percent: z.number().int() }),
+      description:
+        "Open Doorlist's discount code dialog for a show, filled in with this percentage off. Staff check it there and create the code; Doorlist decides whether they're allowed to.",
+    },
+  },
 });

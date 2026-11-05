@@ -3,6 +3,7 @@
 import { defineRegistry, useBoundProp } from "@json-render/react";
 import { catalog } from "./catalog";
 import { query, useLive } from "./useLive";
+import { actions } from "./actions";
 import { Section } from "../components/Section";
 import { StatCard } from "../components/StatCard";
 import { ShowTable, type ShowRow } from "../components/ShowTable";
@@ -38,7 +39,8 @@ function useShow(id: string) {
   return useLive<{ show: Show }>(`/api/shows/${id}`)?.show ?? null;
 }
 
-export const { registry } = defineRegistry(catalog, {
+export const { registry, handlers } = defineRegistry(catalog, {
+  actions,
   components: {
     Section: ({ props, children }) => <Section title={props.title}>{children}</Section>,
     StatCard: ({ props }) => {
@@ -93,6 +95,13 @@ export const { registry } = defineRegistry(catalog, {
         </Field>
       );
     },
+    Button: ({ props, emit }) => (
+      <div className="answer-button">
+        <button className={`button${props.variant === "secondary" ? " secondary" : ""}`} onClick={() => emit("press")}>
+          {props.label}
+        </button>
+      </div>
+    ),
     NumberField: ({ props, bindings }) => {
       const [value, setValue] = useBoundProp<number>(props.value as unknown as number, bindings?.value);
       return (
