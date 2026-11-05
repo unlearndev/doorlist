@@ -1,0 +1,18 @@
+/* Doorlist's design tokens. Every colour, font and size in the app comes from here. */
+:root {
+  --paper: #fbf8f3;
+  --paper-2: #f3eee6;
+  --ink: #1e1b2e;
+  --muted: #6b6578;
+  --line: #e4ddd2;
+  --accent: #e8590c;
+  --accent-ink: #b8430a;
+  --good: #2f7d4f;
+  --warn: #b7791f;
+  --bad: #b42318;
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --radius: 10px;
+  --space: 8px;
+}
