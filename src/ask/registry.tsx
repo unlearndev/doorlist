@@ -1,5 +1,8 @@
 // Each catalog entry, drawn with the component Doorlist already uses. The
 // figures come from Doorlist's API (useLive), never from the answer itself.
+// Every part has an empty state, a "couldn't load" state, and a fallback if
+// it fails to draw, so one bad part never takes the rest of the answer down.
+import { Component, type ComponentType, type ReactNode } from "react";
 import { defineRegistry, useBoundProp } from "@json-render/react";
 import { catalog } from "./catalog";
 import { query, useLive } from "./useLive";
@@ -36,74 +39,107 @@ const FILTER_OPTIONS = {
   ],
 };
 
-function useShow(id: string) {
-  return useLive<{ show: Show }>(`/api/shows/${id}`)?.show ?? null;
+// If a part throws while it's drawn, show a short note in its place, rather
+// than nothing at all.
+class PartBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error("Ask: part of an answer failed to draw", error);
+  }
+  render() {
+    return this.state.failed ? <div className="part-note">This part of the answer couldn't be shown.</div> : this.props.children;
+  }
+}
+
+function part<P extends object>(Render: ComponentType<P>) {
+  return (props: P) => (
+    <PartBoundary>
+      <Render {...props} />
+    </PartBoundary>
+  );
+}
+
+function Unavailable({ children }: { children: ReactNode }) {
+  return <div className="part-note">{children}</div>;
+}
+
+function couldntLoad(failed: number | null) {
+  return failed === 404 ? "Doorlist doesn't have that show." : "Couldn't load this from Doorlist. It'll try again in a moment.";
 }
 
 export const { registry, handlers } = defineRegistry(catalog, {
   actions,
   components: {
     Section: ({ props, children }) => <Section title={props.title}>{children}</Section>,
-    StatCard: ({ props }) => {
-      const figure = useLive<Figure>(`/api/figures?${query({ metric: props.metric, month: props.month, showId: props.showId })}`);
-      return <StatCard label={props.label} value={figure ? formatFigure(figure) : <Placeholder width={72} />} hint={props.hint} />;
-    },
-    ShowTable: ({ props }) => {
+    StatCard: part(({ props }) => {
+      const { data, failed } = useLive<Figure>(`/api/figures?${query({ metric: props.metric, month: props.month, showId: props.showId })}`);
+      const value = data ? formatFigure(data) : failed !== null ? "Not available" : <Placeholder width={72} />;
+      return <StatCard label={props.label} value={value} hint={props.hint} />;
+    }),
+    ShowTable: part(({ props }) => {
       // pace and layout arrive already resolved when they follow a filter.
       const pace = props.pace as string | null | undefined;
       const layout = props.layout as string | null | undefined;
-      const rows = useLive<ShowRow[]>(`/api/shows?${query({ month: props.month, pace, layout, ids: props.showIds, sort: props.sort, limit: props.limit })}`);
+      const { data: rows, failed } = useLive<ShowRow[]>(`/api/shows?${query({ month: props.month, pace, layout, ids: props.showIds, sort: props.sort, limit: props.limit })}`);
       return (
         <div className="card">
-          {rows ? <ShowTable rows={rows} onOpen={(id) => (location.hash = `/shows/${id}`)} /> : <Placeholder height={120} />}
+          {rows && rows.length === 0 && <p className="muted">No shows match.</p>}
+          {rows && rows.length > 0 && <ShowTable rows={rows} onOpen={(id) => (location.hash = `/shows/${id}`)} />}
+          {!rows && failed !== null && <p className="muted">{couldntLoad(failed)}</p>}
+          {!rows && failed === null && <Placeholder height={120} />}
         </div>
       );
-    },
-    SalesChart: ({ props }) => {
-      const show = useShow(props.showId);
+    }),
+    SalesChart: part(({ props }) => {
+      const { data, failed } = useLive<{ show: Show }>(`/api/shows/${props.showId}`);
+      if (!data && failed !== null) return <Unavailable>{couldntLoad(failed)}</Unavailable>;
       return (
         <div className="card">
-          <h2>{show ? `${show.title}: tickets sold per day` : "Tickets sold per day"}</h2>
-          {show ? <SalesChart days={show.dailySales} /> : <Placeholder height={140} />}
+          <h2>{data ? `${data.show.title}: tickets sold per day` : "Tickets sold per day"}</h2>
+          {data ? <SalesChart days={data.show.dailySales} /> : <Placeholder height={140} />}
         </div>
       );
-    },
-    TierBreakdown: ({ props }) => {
-      const show = useShow(props.showId);
+    }),
+    TierBreakdown: part(({ props }) => {
+      const { data, failed } = useLive<{ show: Show }>(`/api/shows/${props.showId}`);
+      if (!data && failed !== null) return <Unavailable>{couldntLoad(failed)}</Unavailable>;
       return (
         <div className="card">
-          {show && <h2>{show.title}: tickets</h2>}
-          {show ? <TierBreakdown tiers={show.tiers} /> : <Placeholder height={100} />}
+          {data && <h2>{data.show.title}: tickets</h2>}
+          {data ? <TierBreakdown tiers={data.show.tiers} /> : <Placeholder height={100} />}
         </div>
       );
-    },
-    Callout: ({ props }) => <Callout tone={props.tone} title={props.title} text={props.text} />,
-    Filter: ({ props, bindings }) => {
+    }),
+    Callout: part(({ props }) => <Callout tone={props.tone} title={props.title} text={props.text} />),
+    Filter: part(({ props, bindings }) => {
       const [value, setValue] = useBoundProp<string>(props.value as unknown as string, bindings?.value);
       return (
         <Field label={props.label}>
           <Select value={value ?? ""} options={FILTER_OPTIONS[props.field]} onChange={setValue} />
         </Field>
       );
-    },
-    ShowPicker: ({ props, bindings }) => {
+    }),
+    ShowPicker: part(({ props, bindings }) => {
       const [value, setValue] = useBoundProp<string>(props.value as unknown as string, bindings?.value);
-      const shows = useLive<ShowStats[]>("/api/shows", 60000) ?? [];
+      const shows = useLive<ShowStats[]>("/api/shows", 60000).data ?? [];
       const options = [{ value: "", label: "Choose a show" }, ...shows.map((s) => ({ value: s.id, label: s.title }))];
       return (
         <Field label={props.label}>
           <Select value={value ?? ""} options={options} onChange={setValue} />
         </Field>
       );
-    },
-    Button: ({ props, emit }) => (
+    }),
+    Button: part(({ props, emit }) => (
       <div className="answer-button">
         <button className={`button${props.variant === "secondary" ? " secondary" : ""}`} onClick={() => emit("press")}>
           {props.label}
         </button>
       </div>
-    ),
-    NumberField: ({ props, bindings }) => {
+    )),
+    NumberField: part(({ props, bindings }) => {
       const [value, setValue] = useBoundProp<number>(props.value as unknown as number, bindings?.value);
       return (
         <Field label={props.label}>
@@ -113,6 +149,6 @@ export const { registry, handlers } = defineRegistry(catalog, {
           </span>
         </Field>
       );
-    },
+    }),
   },
 });

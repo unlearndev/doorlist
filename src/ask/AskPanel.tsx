@@ -35,6 +35,10 @@ export function AskPanel({ onClose }: { onClose: () => void }) {
   const { spec, isStreaming, error, send, clear } = useUIStream({ api: "/api/ask" });
   const store = useMemo(() => createStateStore({}), []);
   const forgetStartingValues = useStartingValues(spec?.state, store);
+  // There's an answer to draw once its root element has arrived.
+  const hasAnswer = Boolean(spec?.root && spec.elements?.[spec.root]);
+  // How many lines of the answer Doorlist's checks left out (see checkedLines).
+  const leftOut = Number((spec?.state?.doorlist as { leftOut?: number } | undefined)?.leftOut ?? 0);
 
   // A button in an answer can only open Doorlist's own discount dialog,
   // filled in. Staff check it there, and the server has the final say.
@@ -54,7 +58,7 @@ export function AskPanel({ onClose }: { onClose: () => void }) {
     setCreated(null);
     setQuestion("");
     // With an answer on screen, the question is a follow-up that changes it.
-    void send(question, { previousSpec: spec?.root ? spec : undefined });
+    void send(question, { previousSpec: hasAnswer ? spec : undefined });
   }
 
   function startAgain() {
@@ -77,11 +81,19 @@ export function AskPanel({ onClose }: { onClose: () => void }) {
       <div className="drawer-body">
         {asked.map((q, i) => <div key={i} className="question">{q}</div>)}
         {isStreaming && !spec?.root && <div className="thinking">Working it out…</div>}
-        {error && <div className="answer-text">Something went wrong: {error.message}</div>}
-        {spec?.root && (
+        {error && <div className="answer-text">Ask couldn't get an answer just now ({error.message}). Try again in a moment.</div>}
+        {!isStreaming && !error && asked.length > 0 && !hasAnswer && (
+          <div className="answer-text">I couldn't put an answer together for that one. Try asking it another way.</div>
+        )}
+        {hasAnswer && (
           <JSONUIProvider registry={registry} store={store} handlers={handlers(() => undefined, () => ({}))}>
             <Renderer spec={spec} registry={registry} loading={isStreaming} />
           </JSONUIProvider>
+        )}
+        {!isStreaming && hasAnswer && leftOut > 0 && (
+          <p className="part-note">
+            Doorlist left out {leftOut === 1 ? "one part" : `${leftOut} parts`} of this answer that it couldn't show.
+          </p>
         )}
         {created && <p className="success">Created discount code {created}.</p>}
       </div>
@@ -97,7 +109,7 @@ export function AskPanel({ onClose }: { onClose: () => void }) {
         />
       )}
       <form className="drawer-foot" onSubmit={(e) => { e.preventDefault(); ask(); }}>
-        <input aria-label="Question" placeholder={spec?.root ? "Ask a follow-up…" : "Ask about your shows…"} value={question} onChange={(e) => setQuestion(e.target.value)} />
+        <input aria-label="Question" placeholder={hasAnswer ? "Ask a follow-up…" : "Ask about your shows…"} value={question} onChange={(e) => setQuestion(e.target.value)} />
         <button className="button" disabled={isStreaming}>Ask</button>
       </form>
     </aside>

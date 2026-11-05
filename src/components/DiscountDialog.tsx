@@ -7,10 +7,14 @@ export function DiscountDialog({ showId, title, initialPercent = 10, onClose }: 
   const [error, setError] = useState<string | null>(null);
   async function create() {
     setError(null);
-    const res = await fetch(`/api/shows/${showId}/discounts`, { method: "POST", body: JSON.stringify({ percent }) });
-    const body = await res.json();
-    if (!res.ok) return setError(body.error);
-    onClose(body.code);
+    try {
+      const res = await fetch(`/api/shows/${showId}/discounts`, { method: "POST", body: JSON.stringify({ percent }) });
+      const body = await res.json();
+      if (!res.ok) return setError(body.error);
+      onClose(body.code);
+    } catch {
+      setError("Couldn't reach Doorlist. Check your connection and try again.");
+    }
   }
   return (
     <div className="dialog-backdrop">

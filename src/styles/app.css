@@ -107,3 +107,4 @@ tr.clickable:hover td { background: var(--paper); }
 .placeholder { display: block; background: var(--paper-2); border-radius: 6px; animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.5; } }
 .drawer-head .row { display: flex; gap: 8px; }
+.part-note { flex: 1 1 100%; color: var(--muted); font-size: 14px; border: 1px dashed var(--line); border-radius: var(--radius); padding: 10px 14px; margin: 0; }

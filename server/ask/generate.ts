@@ -140,9 +140,12 @@ const REPLAY = /^replay ([a-z-]+)$/;
 
 // Checks each line of an answer as it arrives, and passes on the ones that
 // are allowed, so the panel can draw the answer while it's still coming in.
+// At the end, Doorlist adds how many lines it left out, under
+// /state/doorlist, where Claude can never write, so the panel can say so.
 export async function* checkedLines(text: AsyncIterable<string>, current: Spec | null): AsyncGenerator<string> {
   let spec: Spec = current ?? { root: "", elements: {} };
   let buffer = "";
+  let leftOut = 0;
   const check = (line: string) => {
     if (!line.trim()) return null;
     try {
@@ -155,6 +158,7 @@ export async function* checkedLines(text: AsyncIterable<string>, current: Spec |
       // Not a whole JSON line, so there's nothing to keep.
     }
     console.warn("Ask left out:", line.slice(0, 160));
+    leftOut += 1;
     return null;
   };
 
@@ -169,6 +173,7 @@ export async function* checkedLines(text: AsyncIterable<string>, current: Spec |
   }
   const last = check(buffer);
   if (last) yield last;
+  yield `${JSON.stringify({ op: "add", path: "/state/doorlist", value: { leftOut } })}\n`;
 }
 
 export async function* answerStream(question: string, onScreen?: Spec | null): AsyncGenerator<string> {
