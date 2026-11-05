@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "vite",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ask:prompt": "node scripts/ask-prompt.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.5.0",
